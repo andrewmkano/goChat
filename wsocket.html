@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>GopherChat</title>
+  <!--<link rel="stylesheet" href="styles.css">-->
+</head>
+<style>
+  html {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background-color: rgb(242, 242, 242);
+    height: inherit;
+  }
+
+  .wrapper {
+    background-color: white;
+    margin: 0 auto;
+    width: 600px;
+    display: flex;
+    flex-flow: column wrap;
+    justify-content: center;
+    border-radius: 10px;
+    position: relative;
+    top: 60px;
+    padding: 5px;
+  }
+
+  .msg-display {
+    height: 400px;
+    width: 550px;
+    border: 2px solid;
+    border-color: darkgray;
+    border-radius: 10px;
+    margin: 0 auto;
+    margin-bottom: 10px;
+  }
+
+  .input-bar {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    margin-bottom: 15px;
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  #text-box {
+    margin: 0;
+    border: 0;
+    padding-left: 5px;
+  }
+</style>
+
+<body>
+  <div class="wrapper">
+    <div class="msg-display" id="msg-output">
+    </div>
+    <div class="input-bar">
+      <input id="text-box" type="text" placeholder="Hey! Down here!">
+      <input type="button" id="send-btn" value="Send" onclick="send()">
+    </div>
+  </div>
+</body>
+<!--<script src="app.js"></script>-->
+<script>
+  var inputMessage = document.getElementById("text-box");
+  var outputMessage = document.getElementById("msg-output");
+
+  var wSocket = new WebSocket("ws://localhost:3000/g");
+  wSocket.addEventListener("message", function (e) { console.log(e); });
+  wSocket.onopen = function () {
+    outputMessage.innerHTML += "<pre>" + "Status: Connected" + "\n" + "</pre>";
+  };
+
+  wSocket.onmessage = function (e) {
+    outputMessage.innerHTML += "<pre>" + e.data + "\n" + "</pre>";
+  };
+
+  function send() {
+    wSocket.send(inputMessage.value);
+    inputMessage.value = "";
+  }
+</script>
+
+</html>
