@@ -1,15 +1,15 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"html/template"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{}
@@ -18,7 +18,23 @@ var connections []*websocket.Conn
 func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "wsocket.html")
+		t, err := template.ParseFiles("public/index.html")
+		if err != nil {
+			http.Error(w, http.StatusText(500), 500)
+			return
+		}
+
+		err = t.Execute(w, nil)
+		if err != nil {
+			http.Error(w, http.StatusText(500), 500)
+			return
+		}
+		// http.ServeFile(w, r, "public/index.html")
+	})
+	router.Handle("/..", http.FileServer(http.Dir("public/styles.css")))
+
+	router.HandleFunc("/.", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "public/app.js")
 	})
 
 	router.HandleFunc("/g", func(w http.ResponseWriter, r *http.Request) {
@@ -27,22 +43,14 @@ func main() {
 
 		go func(conn *websocket.Conn) {
 			for {
-				msgType, msg, _ := conn.ReadMessage()
-
+				msgType, msg, err := conn.ReadMessage()
+				if err != nil {
+					conn.Close()
+				}
 				for _, cox := range connections {
 					cox.WriteMessage(msgType, msg)
-					log.Println("Msg", cox, string(msg))
+					println(string(msg))
 				}
-			}
-		}(conn)
-	})
-
-	router.HandleFunc("/l", func(w http.ResponseWriter, r *http.Request) {
-		var conn, _ = upgrader.Upgrade(w, r, nil)
-		go func(conn *websocket.Conn) {
-			for {
-				_, msg, _ := conn.ReadMessage()
-				println(string(msg))
 			}
 		}(conn)
 	})
@@ -50,7 +58,7 @@ func main() {
 	logCreator := handlers.LoggingHandler(os.Stdout, router)
 
 	server := http.Server{
-		Addr:         "127.0.0.1:3000",
+		Addr:         "0.0.0.0:3000",
 		Handler:      logCreator,
 		WriteTimeout: 10 * time.Second,
 		ReadTimeout:  10 * time.Second,
