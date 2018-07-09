@@ -1,16 +1,21 @@
 var inputMessage = document.getElementById("text-box");
+window.onload = function() {
+  inputMessage.focus();
+};
 var outputMessage = document.getElementById("msg-output");
 var notificationBell = document.getElementById("notification");
-
+//Unused Function at the moment
 function createWebSocket(path) {
   var protocolPrefix = window.location.protocol === "https:" ? "wss:" : "ws:";
   return new WebSocket(protocolPrefix + "//" + location.host + path);
 }
 
-var wSocket = createWebSocket("/g");
+var wSocket = createWebSocket("/ws");
+
 wSocket.addEventListener("message", function(e) {
   console.log(e);
 });
+
 wSocket.onopen = function() {
   outputMessage.innerHTML += "<pre>" + "Status: Connected" + "\n" + "</pre>";
 };
@@ -25,6 +30,12 @@ function send() {
   wSocket.send(inputMessage.value);
   inputMessage.value = "";
 }
+//For the enter button as well
+inputMessage.addEventListener("keyup", function(event) {
+  if (event.keyCode == 13) {
+    document.getElementById("send-btn").click();
+  }
+});
 
 function randomColor() {
   //Base string for the Hex color

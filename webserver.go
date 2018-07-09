@@ -5,8 +5,6 @@ import (
 	"os"
 	"time"
 
-	"html/template"
-
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -17,28 +15,8 @@ var connections []*websocket.Conn
 
 func main() {
 	router := mux.NewRouter()
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		t, err := template.ParseFiles("public/index.html")
-		if err != nil {
-			http.Error(w, http.StatusText(500), 500)
-			return
-		}
-
-		err = t.Execute(w, nil)
-		if err != nil {
-			http.Error(w, http.StatusText(500), 500)
-			return
-		}
-		// http.ServeFile(w, r, "public/index.html")
-	})
-	router.Handle("/..", http.FileServer(http.Dir("public/styles.css")))
-
-	router.HandleFunc("/.", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "public/app.js")
-	})
-
-	router.HandleFunc("/g", func(w http.ResponseWriter, r *http.Request) {
-		var conn, _ = upgrader.Upgrade(w, r, nil)
+	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		var conn, _ = upgrader.Upgrade(w, r, w.Header())
 		connections = append(connections, conn)
 
 		go func(conn *websocket.Conn) {
@@ -54,6 +32,8 @@ func main() {
 			}
 		}(conn)
 	})
+
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("public")))
 
 	logCreator := handlers.LoggingHandler(os.Stdout, router)
 
