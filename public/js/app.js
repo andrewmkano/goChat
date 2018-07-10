@@ -4,7 +4,7 @@ window.onload = function() {
 };
 var outputMessage = document.getElementById("msg-output");
 var notificationBell = document.getElementById("notification");
-//Unused Function at the moment
+
 function createWebSocket(path) {
   var protocolPrefix = window.location.protocol === "https:" ? "wss:" : "ws:";
   return new WebSocket(protocolPrefix + "//" + location.host + path);
@@ -24,6 +24,10 @@ wSocket.onmessage = function(e) {
   outputMessage.innerHTML += "<pre>" + e.data + "\n" + "</pre>";
   var colorToApply = randomColor();
   notificationBell.style.color = colorToApply;
+};
+wSocket.onclose = function() {
+  outputMessage.innerHTML +=
+    "<pre>" + "Status: Connection Closed" + "\n" + "</pre>";
 };
 
 function send() {
