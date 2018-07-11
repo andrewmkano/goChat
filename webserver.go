@@ -15,9 +15,13 @@ var connections []*websocket.Conn //Connections stablished
 
 //Creating a struct for the channels
 type chatChannel struct {
-	channelName string `json:"channelName"` //A name asigned to the channel(Default is always present)
-	path        string `json:"path"`        //the path that leads to the channel(Need a handler for this)
+	//ChannelName is a name asigned to the channel(Default is always present)
+	ChannelName string `json:"ChannelName"`
+	//Path is the Path that leads to the channel(Need a handler for this)
+	Path string `json:"Path"`
 }
+
+// type chatChannels []chatChannel
 
 type chatChannels struct {
 	chatChannels []chatChannel `json:"chatChannels"`
@@ -27,13 +31,20 @@ type chatChannels struct {
 func main() {
 	var c chatChannels
 	router := mux.NewRouter()
+
 	//Creating Default channel for all the newcomers
-	nChannel := createChannel("Default")
-	c.chatChannels = append(c.chatChannels, nChannel)
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		var conn, _ = upgrader.Upgrade(w, r, w.Header())
 		connections = append(connections, conn)
-
+		nChannel := createChannel("Default", w, r)
+		c.chatChannels = append(c.chatChannels, nChannel)
+		// jsonFile, err := json.Marshal(nChannel)
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		conn.WriteJSON(nChannel)
 		conn.SetCloseHandler(func(code int, text string) error {
 			println("%v %v \n", code, text)
 			return nil
@@ -70,10 +81,10 @@ func main() {
 	panic(server.ListenAndServe())
 }
 
-func createChannel(channName string) chatChannel {
+func createChannel(channName string, w http.ResponseWriter, r *http.Request) chatChannel {
 	chPath := "/" + channName
 	return chatChannel{
-		channelName: channName,
-		path:        chPath,
+		ChannelName: channName,
+		Path:        chPath,
 	}
 }
