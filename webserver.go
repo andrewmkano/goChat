@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -10,66 +12,49 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	messageType = "MESSAGE"
+	channelType = "CHANNEL"
+)
+
 var upgrader = websocket.Upgrader{}
-var connections []*websocket.Conn //Connections stablished
+
+//Connections stablished
+var connections []*websocket.Conn
+var c []Channel
+var users []User
 
 //Creating a struct for the channels
-type chatChannel struct {
-	//ChannelName is a name asigned to the channel(Default is always present)
-	ChannelName string `json:"ChannelName"`
-	//Path is the Path that leads to the channel(Need a handler for this)
-	Path string `json:"Path"`
+type Channel struct {
+	//name is a name asigned to the channel(Default is always present)
+	Name string `json:"name"`
 }
 
-// type chatChannels []chatChannel
-
-type chatChannels struct {
-	chatChannels []chatChannel `json:"chatChannels"`
+type User struct {
+	connection     *websocket.Conn
+	currentChannel Channel
+}
+type Message struct {
+	Type string      `json:"Type"`
+	Body interface{} `json:"Body"`
 }
 
-//Today's objective: Make different channels that people can use to comunicate. i have no clue how to do this
-func main() {
-	var c chatChannels
-	router := mux.NewRouter()
-
-	//Creating Default channel for all the newcomers
-	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		var conn, _ = upgrader.Upgrade(w, r, w.Header())
-		connections = append(connections, conn)
-		nChannel := createChannel("Default", w, r)
-		c.chatChannels = append(c.chatChannels, nChannel)
-		// jsonFile, err := json.Marshal(nChannel)
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		conn.WriteJSON(nChannel)
-		conn.SetCloseHandler(func(code int, text string) error {
-			println("%v %v \n", code, text)
-			return nil
-		})
-
-		go func(conn *websocket.Conn) {
-			for {
-				msgType, msg, err := conn.ReadMessage()
-				if err != nil {
-					println("upgrader error %s\n" + err.Error())
-					conn.Close()
-					return
-				}
-				for _, cox := range connections {
-					cox.WriteMessage(msgType, msg)
-					println(string(msg))
-				}
-			}
-		}(conn)
+func init() {
+	c = append(c, Channel{
+		Name: "Default",
 	})
 
+}
+
+func main() {
+	router := mux.NewRouter()
+
+	//Websocket connection handler
+	router.HandleFunc("/ws", websocketHandler)
+	//Serving static files
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("public")))
 
 	logCreator := handlers.LoggingHandler(os.Stdout, router)
-
 	server := http.Server{
 		Addr:         "0.0.0.0:3000",
 		Handler:      logCreator,
@@ -81,10 +66,77 @@ func main() {
 	panic(server.ListenAndServe())
 }
 
-func createChannel(channName string, w http.ResponseWriter, r *http.Request) chatChannel {
-	chPath := "/" + channName
-	return chatChannel{
-		ChannelName: channName,
-		Path:        chPath,
+func broadcastChannels() {
+	for _, conn := range connections {
+		err := notifyChannels(conn)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+}
+
+func notifyChannels(conn *websocket.Conn) error {
+	return conn.WriteJSON(Message{
+		Type: channelType,
+		Body: c,
+	})
+}
+
+func websocketHandler(w http.ResponseWriter, r *http.Request) {
+	var conn, _ = upgrader.Upgrade(w, r, w.Header())
+
+	connections = append(connections, conn)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err := notifyChannels(conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn.SetCloseHandler(func(code int, text string) error {
+		println("%v %v \n", code, text)
+		return nil
+	})
+
+	go func(conn *websocket.Conn) {
+		for {
+			msgType, msg, err := conn.ReadMessage()
+			if err != nil {
+				println("upgrader error %s\n" + err.Error())
+				conn.Close()
+				return
+			}
+
+			messag := Message{}
+			err = json.Unmarshal(msg, &messag)
+
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			switch messag.Type {
+			case "MESSAGE":
+				for _, cox := range connections {
+					cox.WriteJSON(messag)
+					log.Print(msg, msgType)
+				}
+			case "NEW_CHANNEL":
+
+				channelName, ok := messag.Body.(string)
+				if !ok {
+					println("Not a String dude man!")
+					continue
+				}
+
+				c = append(c, Channel{
+					Name: channelName,
+				})
+
+				broadcastChannels()
+			}
+
+		}
+	}(conn)
 }
