@@ -67,10 +67,7 @@ func init() {
 func main() {
 
 	router := mux.NewRouter()
-
-	//Websocket connection handler
 	router.HandleFunc("/ws", websocketHandler)
-	//Serving static files
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("public")))
 
 	logCreator := handlers.LoggingHandler(os.Stdout, router)
@@ -83,7 +80,6 @@ func main() {
 	panic(server.ListenAndServe())
 }
 
-//Updates the list of channels for everyone
 func broadcastChannels() {
 	for _, conn := range connections {
 		err := notifyChannels(conn)
@@ -93,7 +89,6 @@ func broadcastChannels() {
 	}
 }
 
-//Sends a message that contains the list of channels
 func notifyChannels(conn *websocket.Conn) error {
 	return conn.WriteJSON(Message{
 		Type: channelType,
@@ -110,44 +105,23 @@ func addUserToDefault(usr User) {
 //Extracts the user connection from the current slice
 func getUserConnection(currentChannel string, connection *websocket.Conn) User {
 	var usrSwitching User
-	//Iterate over the channels
-
 channelLoop:
 	for i := range c {
 		if c[i].Name != currentChannel {
 			continue
 		}
-		//Look for the current channel of the user
 		channelUsers := c[i].Users
-		//Iterate over the users on that channel
 		for k := range channelUsers {
-			//Look for the user connection
 			if channelUsers[k].Connection != connection {
 				continue
 			}
-
 			usrSwitching = channelUsers[k]
 			c[i].Users = append(channelUsers[:k], channelUsers[k+1:]...)
 			break channelLoop
 		}
 	}
 
-	// c.Debug()
 	return usrSwitching
-}
-
-func getNextChannel(newChannel string, connection *websocket.Conn) []User {
-	var channelUsers []User
-	channelUsers = nil
-
-	for i := range c {
-		//Look for the next channel of the user
-		if c[i].Name == newChannel {
-			channelUsers = c[i].Users
-			return channelUsers
-		}
-	}
-	return channelUsers
 }
 
 func getChannel(channelName string) *Channel {
@@ -175,15 +149,6 @@ userLoop:
 	}
 	return userChan
 }
-
-//Switches the user from a channel to another
-func SwitchChannel(user User, newChannel string) {
-	//Finds the channel
-	nextChannelUsers := getNextChannel(newChannel, user.Connection)
-	//Moves the user into the channel
-	nextChannelUsers = append(nextChannelUsers, user)
-}
-
 func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	var conn, _ = upgrader.Upgrade(w, r, w.Header())
 	connections = append(connections, conn)
@@ -246,35 +211,18 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 					Name:  channelName,
 					Users: usersList,
 				})
-
 				broadcastChannels()
-				println("Im on NEW CHANNEL")
-				println(c[0].Name, " Users: ", len(c[0].Users))
-				println(c[1].Name, " Users: ", len(c[1].Users))
-				println("#########")
+
 			case "CHANGE":
 				newchannel, ok := messag.Body.(string)
 				if !ok {
 					println("Not a String dude!")
 					continue
 				}
-				println("Im on CHANGE")
-				println("ChannelUsers[Default]: ", len(c[0].Users))
-				println("#########")
 				currentChannel := getChannel(UserChannel(routineUser))
 				nextChannel := getChannel(newchannel)
 				user := getUserConnection(currentChannel.Name, currentUser.Connection)
-				println("Before")
-				println(currentChannel.Name, "Users on this channel: ", len(currentChannel.Users), user.Connection)
-				println(nextChannel.Name, "Users on this channel: ", len(nextChannel.Users))
-				println("Captured User", user.Connection)
-				println("#########")
 				nextChannel.Users = append(nextChannel.Users, user)
-				// SwitchChannel(user, newchannel)
-				println("After")
-				println(currentChannel.Name, "Users on this channel: ", len(currentChannel.Users))
-				println(nextChannel.Name, "Users on this channel: ", len(nextChannel.Users), nextChannel.Users)
-				println("#########")
 			}
 
 		}
