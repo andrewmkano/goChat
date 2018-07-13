@@ -21,15 +21,12 @@ const (
 
 var upgrader = websocket.Upgrader{}
 
-//Connections stablished
 var connections []*websocket.Conn
 
 var c Channels
 var users []User
 
-//Creating a struct for the channels
 type Channel struct {
-	//name is a name asigned to the channel(Default is always present)
 	Name  string `json:"name"`
 	Users []User
 }
@@ -97,13 +94,12 @@ func notifyChannels(conn *websocket.Conn) error {
 }
 
 func addUserToDefault(usr User) {
-	log.Println("Adding to default")
 	users = append(users, usr)
 	c[0].Users = users
 }
 
 //Extracts the user connection from the current slice
-func getUserConnection(currentChannel string, connection *websocket.Conn) User {
+func ExtractUser(currentChannel string, connection *websocket.Conn) User {
 	var usrSwitching User
 channelLoop:
 	for i := range c {
@@ -196,7 +192,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 				targetChannel := getChannel(messag.ChannelName)
 				for _, usr := range targetChannel.Users {
 					usr.Connection.WriteJSON(messag)
-					log.Print(msg, msgType)
+
 				}
 			case "NEW_CHANNEL":
 
@@ -221,7 +217,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				currentChannel := getChannel(UserChannel(routineUser))
 				nextChannel := getChannel(newchannel)
-				user := getUserConnection(currentChannel.Name, currentUser.Connection)
+				user := ExtractUser(currentChannel.Name, currentUser.Connection)
 				nextChannel.Users = append(nextChannel.Users, user)
 			}
 
