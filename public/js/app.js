@@ -26,7 +26,7 @@ wSocket.onopen = function() {
 wSocket.onmessage = function(e) {
   var msg = JSON.parse(e.data);
   if (msg.Type == "CHANNEL") {
-    console.log(msg);
+    console.log(msg.body);
     updateChanList(msg.Body);
     return;
   }
@@ -41,9 +41,31 @@ wSocket.onclose = function() {
   outputMessage.innerHTML +=
     "<pre>" + "Status: Connection Closed" + "\n" + "</pre>";
 };
+function getSelectedChannel() {
+  var selectedChannel = "";
+  selectedChannel = chanList.value;
+  return selectedChannel;
+}
+
+chanList.onchange = function() {
+  channel = getSelectedChannel();
+  wSocket.send(
+    JSON.stringify({
+      type: "CHANGE",
+      body: channel,
+      ChannelName: ""
+    })
+  );
+  outputMessage.innerHTML +=
+    "<pre>" + "Server: Welcome to" + channel + "Channel!" + "\n" + "</pre>";
+};
+
 sendBtn.addEventListener("click", function(msg) {
   msg = inputMessage.value;
-  wSocket.send(JSON.stringify({ type: "MESSAGE", body: msg }));
+  chan = getSelectedChannel();
+  wSocket.send(
+    JSON.stringify({ type: "MESSAGE", body: msg, ChannelName: chan })
+  );
   inputMessage.value = "";
 });
 
