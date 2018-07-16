@@ -25,14 +25,14 @@ wSocket.onopen = function() {
 
 wSocket.onmessage = function(e) {
   var msg = JSON.parse(e.data);
+  console.log(msg);
   if (msg.Type == "CHANNEL") {
     console.log(msg.body);
     updateChanList(msg.Body);
     return;
   }
-
-  // console.log(msg);
-  outputMessage.innerHTML += "<pre>" + msg.Body + "\n" + "</pre>";
+  console.log(msg.Text);
+  outputMessage.innerHTML += "<pre>" + msg.Text + "\n" + "</pre>";
   var colorToApply = randomColor();
   notificationBell.style.color = colorToApply;
 };
@@ -52,21 +52,25 @@ chanList.onchange = function() {
   wSocket.send(
     JSON.stringify({
       type: "CHANGE",
-      body: channel,
-      ChannelName: ""
+      body: channel
     })
   );
   outputMessage.innerHTML +=
-    "<pre>" + "Server: Welcome to" + channel + "Channel!" + "\n" + "</pre>";
+    "<pre>" + "Server: Welcome to " + channel + " Channel!" + "\n" + "</pre>";
 };
 
 sendBtn.addEventListener("click", function(msg) {
   msg = inputMessage.value;
-  chan = getSelectedChannel();
-  wSocket.send(
-    JSON.stringify({ type: "MESSAGE", body: msg, ChannelName: chan })
-  );
-  inputMessage.value = "";
+  if (inputMessage.value.search("/B") == 0) {
+    broadcastPrefix = "Broadcast: ";
+    broadcastMessage = broadcastPrefix + msg.split("/B").join("");
+    wSocket.send(JSON.stringify({ type: "BROADCAST", body: broadcastMessage }));
+    inputMessage.value = "";
+  } else {
+    chan = getSelectedChannel();
+    wSocket.send(JSON.stringify({ type: "MESSAGE", body: msg }));
+    inputMessage.value = "";
+  }
 });
 
 inputMessage.addEventListener("keyup", function(event) {
@@ -76,10 +80,6 @@ inputMessage.addEventListener("keyup", function(event) {
 });
 
 channelBtn.addEventListener("click", function(msg) {
-  if (chanInput.value.trim() == "") {
-    console.error("The field cannot be blank");
-  }
-
   channelName = chanInput.value;
   wSocket.send(JSON.stringify({ Type: "NEW_CHANNEL", Body: channelName }));
   chanInput.value = "";
@@ -87,7 +87,7 @@ channelBtn.addEventListener("click", function(msg) {
 
 chanInput.addEventListener("keyup", function(evt) {
   if (evt.keyCode == 13) {
-    chanInput.click();
+    document.getElementById("channel-btn").click();
   }
 });
 
@@ -95,22 +95,13 @@ function updateChanList(channels) {
   clearChanList();
   channels.forEach(element => {
     var optionElement = document.createElement("option");
-    optionElement.innerHTML = element.name;
-    optionElement.value = element.name;
+    optionElement.innerHTML = element.ChannelName;
+    optionElement.value = element.ChannelName;
     chanList.appendChild(optionElement);
   });
 }
 function clearChanList() {
   chanList.options.length = 0;
-}
-
-function createChannel() {
-  if (chanInput.value.trim() == "") {
-    return;
-  }
-  var chanName = chanInput.value;
-  wSocket.send(chanName);
-  chanInput.value = "";
 }
 
 function randomColor() {
