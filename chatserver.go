@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -10,11 +12,12 @@ type chatServer struct {
 }
 
 type message struct {
-	Text string
+	Username string
+	Text     string
 }
 
 type user struct {
-	UserName   string
+	Username   string
 	Connection *websocket.Conn
 }
 
@@ -77,6 +80,29 @@ func (cs *chatServer) emitMessages(ch channel, msg message) {
 		usr.Connection.WriteJSON(msg)
 	}
 }
+func (cs *chatServer) emitPrivateMessage(targetUserName string, msg message) {
+	for _, ch := range cs.channels {
+		for _, usr := range ch.Users {
+			if usr.Username != targetUserName {
+				continue
+			}
+
+			var messg struct {
+				Type string
+				Body interface{}
+				From string
+			}
+
+			messg.Type = privateType
+			messg.Body = msg.Text
+			messg.From = msg.Username
+			println(usr.Connection)
+			usr.Connection.WriteJSON(messg)
+			break
+		}
+	}
+}
+
 func (cs *chatServer) emitBroadcast(msg message) {
 	for _, usr := range cs.users {
 		usr.Connection.WriteJSON(msg)
@@ -92,26 +118,6 @@ func (cs *chatServer) createChannel(chanName string) *channel {
 	return &newChannel
 }
 
-func (cs *chatServer) obtainUserFromCh(currentCh string, conn *websocket.Conn) user {
-	var usrSwitching user
-channelLoop:
-	for i := range cs.channels {
-		if cs.channels[i].ChannelName != currentCh {
-			continue
-		}
-		channelUsers := cs.channels[i].Users
-		for k := range channelUsers {
-			if channelUsers[k].Connection != conn {
-				continue
-			}
-			usrSwitching = channelUsers[k]
-			cs.channels[i].Users = append(channelUsers[:k], channelUsers[k+1:]...)
-			break channelLoop
-		}
-	}
-
-	return usrSwitching
-}
 func (cs *chatServer) catchUser(previousCh *channel, conn *websocket.Conn) user {
 	var usr user
 	for i := range previousCh.Users {
@@ -133,11 +139,95 @@ func (cs *chatServer) addUsertoChannel(chName string, usr user) {
 		cs.channels[i].Users = append(cs.channels[i].Users, usr)
 	}
 }
+func (cs *chatServer) addUserName(usrName string, conn *websocket.Conn) {
+	for i := range cs.users {
+		if cs.users[i].Connection != conn {
+			continue
+		}
+		cs.users[i].Username = usrName
+		break
+	}
+}
+func (cs *chatServer) findUserName(conn *websocket.Conn) string {
+	var usrName string
+	for _, usr := range cs.users {
+		if usr.Connection != conn {
+			continue
+		}
+		usrName = usr.Username
+		break
+	}
+	return usrName
+}
 
-func (cs *chatServer) UpdateUserCh(nextCh string, conn *websocket.Conn) {
-	currentChannel := cs.findUserChannel(conn)
-	userConn := cs.obtainUserFromCh(currentChannel.ChannelName, conn)
-	nextChannel := cs.findChannel(nextCh)
-	nextChannel.Users = append(nextChannel.Users, userConn)
+func (cs *chatServer) emitPrivateMSG(targetUsr string, fromUser string, messg string) {
+	for _, usr := range cs.users {
+		if targetUsr != usr.Username {
+			continue
+		}
+		var msg struct {
+			Type string
+			Body interface{}
+			From string
+		}
+		msg.Type = privateType
+		msg.Body = messg
+		msg.From = fromUser
 
+		usr.Connection.WriteJSON(msg)
+	}
+
+}
+
+func (cs *chatServer) findUserChannelByName(targetUserName string) *channel {
+	var targetUserChannel *channel
+searchLoop:
+	for _, ch := range cs.channels {
+		for _, usr := range ch.Users {
+			if usr.Username != targetUserName {
+				continue
+			}
+			targetUserChannel = &ch
+			break searchLoop
+		}
+	}
+	return targetUserChannel
+}
+
+func (cs *chatServer) sendUsersList(conn *websocket.Conn) error {
+	var msg struct {
+		Type string
+		Body interface{}
+	}
+	msg.Type = userType
+	msg.Body = cs.users
+	return conn.WriteJSON(msg)
+}
+
+func (cs *chatServer) broadcastUsersList() {
+	for _, usr := range cs.users {
+		err := cs.sendUsersList(usr.Connection)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func (cs *chatServer) sendChannelsList(conn *websocket.Conn) error {
+	var msg struct {
+		Type string
+		Body interface{}
+	}
+	msg.Type = channelType
+	msg.Body = cs.channels
+	return conn.WriteJSON(msg)
+}
+
+func (cs *chatServer) broadcastChannelsList() {
+	for _, conn := range cs.users {
+		err := cs.sendChannelsList(conn.Connection)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }

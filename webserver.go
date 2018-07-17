@@ -16,6 +16,8 @@ const (
 	messageType = "MESSAGE"
 	channelType = "CHANNEL"
 	changeType  = "CHANGE"
+	userType    = "NEW_USER"
+	privateType = "PMESSAGE"
 )
 
 var upgrader = websocket.Upgrader{}
@@ -45,25 +47,6 @@ func main() {
 	panic(server.ListenAndServe())
 }
 
-func sendChannelsList(conn *websocket.Conn) error {
-	var msg struct {
-		Type string
-		Body interface{}
-	}
-	msg.Type = channelType
-	msg.Body = cs.channels
-	return conn.WriteJSON(msg)
-}
-
-func broadcastChannelsList() {
-	for _, conn := range cs.users {
-		err := sendChannelsList(conn.Connection)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-}
-
 func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 	var conn, _ = upgrader.Upgrade(w, r, w.Header())
 	currentUser := user{
@@ -74,7 +57,7 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	err := sendChannelsList(conn)
+	err := cs.sendChannelsList(conn)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +68,9 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	go func(conn *websocket.Conn) {
+		var usrname string
 		routineUser := user{
+			Username:   usrname,
 			Connection: conn,
 		}
 
@@ -98,17 +83,17 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			var messg struct {
-				Type string
-				Body interface{}
+				Type    string
+				Body    interface{}
+				Enduser string
 			}
 
 			err = json.Unmarshal(msg, &messg)
-
 			if err != nil {
 				log.Println(err)
 				return
 			}
-
+			println("Message Type: ", messg.Type)
 			switch messg.Type {
 			case "MESSAGE":
 				messageText, ok := messg.Body.(string)
@@ -118,13 +103,22 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				newMessage := message{
-					Text: messageText,
+					Username: cs.findUserName(routineUser.Connection),
+					Text:     messageText,
 				}
 
 				targetChannel := cs.findUserChannel(routineUser.Connection)
 				targetChannel.Messages = append(targetChannel.Messages, newMessage)
 				cs.emitMessages(*targetChannel, newMessage)
 
+			case "PMESSAGE":
+				messageText, ok := messg.Body.(string)
+				if !ok {
+					println("Not a String dude!")
+					continue
+				}
+				println("To: ", messg.Enduser, " From: ", cs.findUserName(routineUser.Connection))
+				cs.emitPrivateMSG(messg.Enduser, cs.findUserName(routineUser.Connection), messageText)
 			case "NEW_CHANNEL":
 				channelName, ok := messg.Body.(string)
 				if !ok {
@@ -134,7 +128,7 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 
 				newChannel := cs.createChannel(channelName)
 				cs.channels = append(cs.channels, *newChannel)
-				broadcastChannelsList()
+				cs.broadcastChannelsList()
 
 			case "CHANGE":
 				newchannelName, ok := messg.Body.(string)
@@ -154,9 +148,18 @@ func wsocketHandler(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				broadcastMessage := message{
-					Text: bMessage,
+					Text:     bMessage,
+					Username: cs.findUserName(routineUser.Connection),
 				}
 				cs.emitBroadcast(broadcastMessage)
+
+			case "NEW_USER":
+				usrName, ok := messg.Body.(string)
+				if !ok {
+					println("Not a string holmes")
+				}
+				cs.addUserName(usrName, routineUser.Connection)
+				cs.broadcastUsersList()
 			}
 		}
 	}(conn)
